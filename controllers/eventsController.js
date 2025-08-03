@@ -22,6 +22,29 @@ exports.createEvent = async (req, res, next) => {
   }
 };
 
+// @desc    Close an event
+// @route   POST /api/events/:id/close
+// @access  Private/Admin
+exports.closeEvent = async (req, res, next) => {
+  try {
+    let event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    event.status = 'closed';
+    await event.save();
+
+    res.status(200).json({
+      success: true,
+      event,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
 // @desc    Update an event
 // @route   PUT /api/events/:id
 // @access  Private/Admin

@@ -38,6 +38,9 @@
     "testEnvironment": "node",
     "testMatch": [
       "**/test/**/*.js"
+    ],
+    "setupFiles": [
+      "dotenv/config"
     ]
   }
 }

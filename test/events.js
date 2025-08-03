@@ -242,4 +242,51 @@ describe('Events API', () => {
       expect(res.body.error).toBe('Cannot update a closed event');
     });
   });
+
+  describe('POST /api/events/:id/close', () => {
+    let event;
+
+    beforeEach(async () => {
+      event = await Event.create({
+        name: 'Yoga Session',
+        price: 100,
+        endAt: '2025-08-03T18:00:00.000Z',
+      });
+    });
+
+    it('should close an event for an admin user', async () => {
+      const res = await request(app)
+        .post(`/api/events/${event._id}/close`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send();
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.event.status).toBe('closed');
+    });
+
+    it('should not close an event if not found', async () => {
+      const res = await request(app)
+        .post(`/api/events/${new mongoose.Types.ObjectId()}/close`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send();
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe('Event not found');
+    });
+
+    it('should not close an event for a non-admin user', async () => {
+      const res = await request(app)
+        .post(`/api/events/${event._id}/close`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send();
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe(
+        'User role member is not authorized to access this route'
+      );
+    });
+  });
 });
