@@ -23,8 +23,12 @@ app.use(express.json());
 // Mount routers
 const auth = require('./routes/auth');
 const events = require('./routes/events');
+const users = require('./routes/users');
+const payments = require('./routes/payments');
 app.use('/api/auth', auth);
 app.use('/api/events', events);
+app.use('/api/users', users);
+app.use('/api/payments', payments);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

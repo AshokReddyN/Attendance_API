@@ -4,12 +4,15 @@ const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const User = require('../models/User');
 const Event = require('../models/Event');
+const Participation = require('../models/Participation');
 const jwt = require('jsonwebtoken');
 
 describe('Events API', () => {
   let mongoServer;
   let adminToken;
   let memberToken;
+  let adminUser;
+  let memberUser;
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
@@ -17,7 +20,7 @@ describe('Events API', () => {
     await mongoose.connect(mongoUri);
 
     // Create admin user
-    const adminUser = await User.create({
+    adminUser = await User.create({
       name: 'Admin User',
       email: 'admin@example.com',
       password: 'password123',
@@ -26,7 +29,7 @@ describe('Events API', () => {
     adminToken = jwt.sign({ id: adminUser._id, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     // Create member user
-    const memberUser = await User.create({
+    memberUser = await User.create({
       name: 'Member User',
       email: 'member@example.com',
       password: 'password123',
@@ -42,6 +45,63 @@ describe('Events API', () => {
 
   beforeEach(async () => {
     await Event.deleteMany({});
+    await Participation.deleteMany({});
+  });
+
+  describe('GET /api/events', () => {
+    beforeEach(async () => {
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+      const event1 = await Event.create({ name: 'Event 1', price: 10, endAt: today });
+      const event2 = await Event.create({ name: 'Event 2', price: 20, endAt: tomorrow });
+      const event3 = await Event.create({ name: 'Event 3', price: 30, endAt: nextMonth });
+
+      await Participation.create({ event: event1._id, user: memberUser._id });
+      await Participation.create({ event: event1._id, user: adminUser._id });
+    });
+
+    it('should return all events for an admin', async () => {
+      const res = await request(app)
+        .get('/api/events')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.events.length).toBe(3);
+      expect(res.body.events[0].optInCount).toBe(2);
+      expect(res.body.events[1].optInCount).toBe(0);
+    });
+
+    it('should return events filtered by month for an admin', async () => {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      const monthString = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+
+      const res = await request(app)
+        .get(`/api/events?month=${monthString}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.events.length).toBe(1);
+      expect(res.body.events[0].name).toBe('Event 3');
+    });
+
+    it("should return only today's active events for a member", async () => {
+      const res = await request(app)
+        .get('/api/events')
+        .set('Authorization', `Bearer ${memberToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.events.length).toBe(1);
+      expect(res.body.events[0].name).toBe('Event 1');
+      expect(res.body.events[0].optInCount).toBe(2);
+    });
   });
 
   describe('POST /api/events', () => {

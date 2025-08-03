@@ -24,12 +24,25 @@ const EventSchema = new mongoose.Schema({
   },
 });
 
+// Virtual for opt-in count
+EventSchema.virtual('optInCount', {
+  ref: 'Participation',
+  localField: '_id',
+  foreignField: 'event',
+  count: true,
+});
+
 EventSchema.set('toJSON', {
+  virtuals: true,
   transform: (document, returnedObject) => {
     returnedObject.id = returnedObject._id.toString();
     delete returnedObject._id;
     delete returnedObject.__v;
   },
+});
+
+EventSchema.set('toObject', {
+  virtuals: true,
 });
 
 module.exports = mongoose.model('Event', EventSchema);
