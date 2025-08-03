@@ -169,4 +169,77 @@ describe('Events API', () => {
       );
     });
   });
+
+  describe('PUT /api/events/:id', () => {
+    let event;
+
+    beforeEach(async () => {
+      event = await Event.create({
+        name: 'Yoga Session',
+        price: 100,
+        endAt: '2025-08-03T18:00:00.000Z',
+      });
+    });
+
+    it('should update an event for an admin user', async () => {
+      const res = await request(app)
+        .put(`/api/events/${event._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Morning Yoga',
+          price: 110,
+          endAt: '2025-08-03T19:00:00.000Z',
+        });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.event.name).toBe('Morning Yoga');
+      expect(res.body.event.price).toBe(110);
+      expect(res.body.event.endAt).toBe('2025-08-03T19:00:00.000Z');
+    });
+
+    it('should not update an event if not found', async () => {
+      const res = await request(app)
+        .put(`/api/events/${new mongoose.Types.ObjectId()}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Morning Yoga',
+        });
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe('Event not found');
+    });
+
+    it('should not update an event for a non-admin user', async () => {
+      const res = await request(app)
+        .put(`/api/events/${event._id}`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({
+          name: 'Morning Yoga',
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe(
+        'User role member is not authorized to access this route'
+      );
+    });
+
+    it('should not update a closed event', async () => {
+      event.status = 'closed';
+      await event.save();
+
+      const res = await request(app)
+        .put(`/api/events/${event._id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Morning Yoga',
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe('Cannot update a closed event');
+    });
+  });
 });
