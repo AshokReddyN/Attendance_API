@@ -1,4 +1,91 @@
 const Event = require('../models/Event');
+const Participation = require('../models/Participation');
+
+// @desc    Get events
+// @route   GET /api/events
+// @access  Private (Admin and Member)
+exports.getEvents = async (req, res, next) => {
+  try {
+    let query;
+
+    if (req.user.role === 'admin') {
+      const { month } = req.query;
+      const filter = {};
+
+      if (month) {
+        const year = parseInt(month.split('-')[0]);
+        const monthIndex = parseInt(month.split('-')[1]) - 1;
+        const startDate = new Date(year, monthIndex, 1);
+        const endDate = new Date(year, monthIndex + 1, 1);
+        filter.endAt = { $gte: startDate, $lt: endDate };
+      }
+
+      query = Event.find(filter);
+    } else {
+      // Member
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+      query = Event.find({
+        status: 'open',
+        endAt: { $gte: startOfDay, $lt: endOfDay },
+      });
+    }
+
+    const events = await query.populate('optInCount');
+
+    res.status(200).json({
+      success: true,
+      events,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+// @desc    Opt-in to an event
+// @route   POST /api/events/:id/optin
+// @access  Private/Member
+exports.optInEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    if (event.status !== 'open') {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Event is not open for opt-in' });
+    }
+
+    // Check if user has already opted in
+    const existingParticipation = await Participation.findOne({
+      event: req.params.id,
+      user: req.user.id,
+    });
+
+    if (existingParticipation) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Already opted in to this event' });
+    }
+
+    const participation = await Participation.create({
+      event: req.params.id,
+      user: req.user.id,
+    });
+
+    res.status(201).json({
+      success: true,
+      participation,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
 
 // @desc    Create new event
 // @route   POST /api/events
