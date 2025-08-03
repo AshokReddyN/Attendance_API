@@ -12,6 +12,11 @@ if (process.env.NODE_ENV !== 'test') {
 
 const app = express();
 
+const jsonParser = require('./middleware/jsonParser');
+
+// JSON parser middleware
+app.use(jsonParser);
+
 // Body parser
 app.use(express.json());
 

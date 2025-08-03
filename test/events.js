@@ -91,5 +91,21 @@ describe('Events API', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.error).toBe('Not authorized to access this route');
     });
+
+    it('should create a new event when body is a JSON string', async () => {
+      const res = await request(app)
+        .post('/api/events')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({
+          name: 'Yoga Session',
+          price: 100,
+          endAt: '2025-08-03T18:00:00.000Z',
+        }));
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.event).toHaveProperty('id');
+    });
   });
 });
