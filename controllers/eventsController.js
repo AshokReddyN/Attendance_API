@@ -22,6 +22,37 @@ exports.createEvent = async (req, res, next) => {
   }
 };
 
+// @desc    Update an event
+// @route   PUT /api/events/:id
+// @access  Private/Admin
+exports.updateEvent = async (req, res, next) => {
+  try {
+    let event = await Event.findById(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    if (event.status === 'closed') {
+      return res
+        .status(400)
+        .json({ success: false, error: 'Cannot update a closed event' });
+    }
+
+    event = await Event.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    res.status(200).json({
+      success: true,
+      event,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
 // @desc    Clone an existing event
 // @route   POST /api/events/clone
 // @access  Private/Admin
