@@ -108,4 +108,65 @@ describe('Events API', () => {
       expect(res.body.event).toHaveProperty('id');
     });
   });
+
+  describe('POST /api/events/clone', () => {
+    let sourceEvent;
+
+    beforeEach(async () => {
+      sourceEvent = await Event.create({
+        name: 'Yoga Session',
+        price: 100,
+        endAt: '2025-08-03T18:00:00.000Z',
+      });
+    });
+
+    it('should clone an event for an admin user', async () => {
+      const res = await request(app)
+        .post('/api/events/clone')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          sourceEventId: sourceEvent._id,
+          newEndAt: '2025-08-04T18:00:00.000Z',
+          name: 'Yoga Session - Extended',
+          price: 120,
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.event).toHaveProperty('id');
+      expect(res.body.event.name).toBe('Yoga Session - Extended');
+      expect(res.body.event.price).toBe(120);
+      expect(res.body.event.endAt).toBe('2025-08-04T18:00:00.000Z');
+      expect(res.body.event.status).toBe('open');
+    });
+
+    it('should not clone an event if source event not found', async () => {
+      const res = await request(app)
+        .post('/api/events/clone')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          sourceEventId: new mongoose.Types.ObjectId(),
+          newEndAt: '2025-08-04T18:00:00.000Z',
+        });
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe('Source event not found');
+    });
+
+    it('should not clone an event for a non-admin user', async () => {
+      const res = await request(app)
+        .post('/api/events/clone')
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({
+          sourceEventId: sourceEvent._id,
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toBe(
+        'User role member is not authorized to access this route'
+      );
+    });
+  });
 });
