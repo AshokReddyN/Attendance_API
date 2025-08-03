@@ -6,16 +6,25 @@ const connectDB = require('./config/db');
 dotenv.config();
 
 // Connect to database
-connectDB();
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 const app = express();
+
+const jsonParser = require('./middleware/jsonParser');
+
+// JSON parser middleware
+app.use(jsonParser);
 
 // Body parser
 app.use(express.json());
 
 // Mount routers
 const auth = require('./routes/auth');
+const events = require('./routes/events');
 app.use('/api/auth', auth);
+app.use('/api/events', events);
 
 app.get('/', (req, res) => {
   res.send('API is running...');
