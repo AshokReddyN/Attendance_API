@@ -10,6 +10,7 @@ dotenv.config();
 // @access  Public
 exports.register = async (req, res, next) => {
   try {
+    console.log('Registering user:', req.body);
     const { name, email, password, role } = req.body;
 
     // Create user
@@ -22,6 +23,7 @@ exports.register = async (req, res, next) => {
 
     sendTokenResponse(user, 200, res);
   } catch (err) {
+    console.error(err);
     res.status(400).json({ success: false, error: err.message });
   }
 };
