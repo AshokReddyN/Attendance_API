@@ -44,6 +44,33 @@ exports.getEvents = async (req, res, next) => {
   }
 };
 
+// @desc    Get event participants
+// @route   GET /api/events/:eventId/participants
+// @access  Private/Admin
+exports.getEventParticipants = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findById(eventId);
+
+    if (!event) {
+      return res.status(404).json({ success: false, message: "Event not found" });
+    }
+
+    const participations = await Participation.find({ event: eventId }).populate('user', 'name email');
+
+    const participants = participations.map(p => ({
+      userId: p.user._id,
+      name: p.user.name,
+      email: p.user.email,
+      optedInAt: p.optedInAt
+    }));
+
+    return res.json({ success: true, eventId, participants });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
 // @desc    Opt-in to an event
 // @route   POST /api/events/:id/optin
 // @access  Private/Member
