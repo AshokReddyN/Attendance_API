@@ -108,4 +108,75 @@ describe('Payments API', () => {
         expect(res.statusCode).toBe(403);
       });
   });
+
+  describe('GET /api/payments/me/monthly', () => {
+    it('should return monthly payment summary for the logged-in user', async () => {
+      const month = '2025-08';
+      const event1 = await Event.create({ name: 'Event 1', price: 100, endAt: new Date('2025-08-05') });
+      const event2 = await Event.create({ name: 'Event 2', price: 200, endAt: new Date('2025-08-15') });
+      await Event.create({ name: 'Event in another month', price: 50, endAt: new Date('2025-09-10') });
+
+      await Participation.create({ event: event1._id, user: user1._id });
+      await Participation.create({ event: event2._id, user: user1._id });
+      // Participation for another user, should not be included
+      await Participation.create({ event: event1._id, user: user2._id });
+
+      await Payment.create({ user: user1._id, month, paymentStatus: 'Paid', totalAmount: 300 });
+
+      const res = await request(app)
+        .get(`/api/payments/me/monthly?month=${month}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      const summary = res.body.data;
+      expect(summary.userId).toBe(user1._id.toString());
+      expect(summary.userName).toBe('User One');
+      expect(summary.month).toBe(month);
+      expect(summary.totalAmount).toBe(300);
+      expect(summary.paymentStatus).toBe('Paid');
+      expect(summary.events).toHaveLength(2);
+      expect(summary.events[0].name).toBe('Event 1');
+      expect(summary.events[1].name).toBe('Event 2');
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+        const res = await request(app)
+          .get('/api/payments/me/monthly?month=2025-08');
+
+        expect(res.statusCode).toBe(401);
+    });
+
+    it('should return 400 if month parameter is missing', async () => {
+        const res = await request(app)
+          .get('/api/payments/me/monthly')
+          .set('Authorization', `Bearer ${memberToken}`);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toBe('Month query parameter in YYYY-MM format is required');
+    });
+
+    it('should return 400 if month parameter is in invalid format', async () => {
+        const res = await request(app)
+          .get('/api/payments/me/monthly?month=202508')
+          .set('Authorization', `Bearer ${memberToken}`);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body.error).toBe('Month query parameter in YYYY-MM format is required');
+    });
+
+    it('should return a summary with 0 total when there are no participations', async () => {
+      const month = '2025-08';
+      const res = await request(app)
+        .get(`/api/payments/me/monthly?month=${month}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      const summary = res.body.data;
+      expect(summary.totalAmount).toBe(0);
+      expect(summary.paymentStatus).toBe('Unpaid');
+      expect(summary.events).toHaveLength(0);
+    });
+  });
 });
