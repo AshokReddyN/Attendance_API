@@ -85,6 +85,73 @@ exports.getMonthlyPayments = async (req, res, next) => {
   }
 };
 
+// @desc    Get all monthly payment summaries for the logged-in user
+// @route   GET /api/payments/me
+// @access  Private
+exports.getMyPaymentsHistory = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const monthlyTotals = await Participation.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(userId),
+        },
+      },
+      {
+        $lookup: {
+          from: 'events',
+          localField: 'event',
+          foreignField: '_id',
+          as: 'eventDetails',
+        },
+      },
+      {
+        $unwind: '$eventDetails',
+      },
+      {
+        $project: {
+          price: '$eventDetails.price',
+          month: {
+            $dateToString: { format: '%Y-%m', date: '$eventDetails.endAt' },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$month',
+          totalAmount: { $sum: '$price' },
+        },
+      },
+      {
+        $sort: { _id: -1 },
+      },
+    ]);
+
+    const months = monthlyTotals.map((item) => item._id);
+    const payments = await Payment.find({
+      user: userId,
+      month: { $in: months },
+    });
+    const paymentStatusMap = new Map(
+      payments.map((p) => [p.month, p.paymentStatus])
+    );
+
+    const history = monthlyTotals.map((item) => ({
+      month: item._id,
+      totalAmount: item.totalAmount,
+      paymentStatus: paymentStatusMap.get(item._id) || 'Unpaid',
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: history,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
 // @desc    Update monthly payment status
 // @route   POST /api/payments/monthly/status
 // @access  Private/Admin
