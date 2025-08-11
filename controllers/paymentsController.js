@@ -85,27 +85,14 @@ exports.getMonthlyPayments = async (req, res, next) => {
   }
 };
 
-// @desc    Get monthly payment summary for the logged-in user
-// @route   GET /api/payments/me/monthly
+// @desc    Get all monthly payment summaries for the logged-in user
+// @route   GET /api/payments/me
 // @access  Private
-exports.getMyMonthlyPayments = async (req, res, next) => {
+exports.getMyPaymentsHistory = async (req, res, next) => {
   try {
-    const { month } = req.query;
     const userId = req.user.id;
 
-    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Month query parameter in YYYY-MM format is required',
-      });
-    }
-
-    const year = parseInt(month.split('-')[0]);
-    const monthIndex = parseInt(month.split('-')[1]) - 1;
-    const startDate = new Date(year, monthIndex, 1);
-    const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
-
-    const userParticipations = await Participation.aggregate([
+    const monthlyTotals = await Participation.aggregate([
       {
         $match: {
           user: new mongoose.Types.ObjectId(userId),
@@ -123,49 +110,42 @@ exports.getMyMonthlyPayments = async (req, res, next) => {
         $unwind: '$eventDetails',
       },
       {
-        $match: {
-          'eventDetails.endAt': { $gte: startDate, $lte: endDate },
+        $project: {
+          price: '$eventDetails.price',
+          month: {
+            $dateToString: { format: '%Y-%m', date: '$eventDetails.endAt' },
+          },
         },
       },
       {
         $group: {
-          _id: '$user',
-          totalAmount: { $sum: '$eventDetails.price' },
-          events: { $push: '$eventDetails' },
+          _id: '$month',
+          totalAmount: { $sum: '$price' },
         },
+      },
+      {
+        $sort: { _id: -1 },
       },
     ]);
 
-    let summary = {
-      userId: userId,
-      userName: req.user.name,
-      month: month,
-      totalAmount: 0,
-      paymentStatus: 'Unpaid',
-      events: [],
-    };
+    const months = monthlyTotals.map((item) => item._id);
+    const payments = await Payment.find({
+      user: userId,
+      month: { $in: months },
+    });
+    const paymentStatusMap = new Map(
+      payments.map((p) => [p.month, p.paymentStatus])
+    );
 
-    if (userParticipations.length > 0) {
-      const result = userParticipations[0];
-      summary.totalAmount = result.totalAmount;
-      summary.events = result.events.map((e) => ({
-        name: e.name,
-        price: e.price,
-        endAt: e.endAt,
-      }));
-
-      const payment = await Payment.findOne({
-        user: userId,
-        month: month,
-      });
-      if (payment) {
-        summary.paymentStatus = payment.paymentStatus;
-      }
-    }
+    const history = monthlyTotals.map((item) => ({
+      month: item._id,
+      totalAmount: item.totalAmount,
+      paymentStatus: paymentStatusMap.get(item._id) || 'Unpaid',
+    }));
 
     res.status(200).json({
       success: true,
-      data: summary,
+      data: history,
     });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

@@ -109,74 +109,68 @@ describe('Payments API', () => {
       });
   });
 
-  describe('GET /api/payments/me/monthly', () => {
-    it('should return monthly payment summary for the logged-in user', async () => {
-      const month = '2025-08';
-      const event1 = await Event.create({ name: 'Event 1', price: 100, endAt: new Date('2025-08-05') });
-      const event2 = await Event.create({ name: 'Event 2', price: 200, endAt: new Date('2025-08-15') });
-      await Event.create({ name: 'Event in another month', price: 50, endAt: new Date('2025-09-10') });
+  describe('GET /api/payments/me', () => {
+    it('should return the full payment history for the logged-in user, sorted by month desc', async () => {
+      // Create events across different months
+      const eventAug1 = await Event.create({ name: 'Event Aug 1', price: 100, endAt: new Date('2025-08-05') });
+      const eventAug2 = await Event.create({ name: 'Event Aug 2', price: 150, endAt: new Date('2025-08-20') });
+      const eventJul1 = await Event.create({ name: 'Event Jul 1', price: 200, endAt: new Date('2025-07-10') });
+      const eventSep1 = await Event.create({ name: 'Event Sep 1', price: 50, endAt: new Date('2025-09-01') });
 
-      await Participation.create({ event: event1._id, user: user1._id });
-      await Participation.create({ event: event2._id, user: user1._id });
+      // Create participations for the logged-in user (user1)
+      await Participation.create({ event: eventAug1._id, user: user1._id });
+      await Participation.create({ event: eventAug2._id, user: user1._id });
+      await Participation.create({ event: eventJul1._id, user: user1._id });
+      await Participation.create({ event: eventSep1._id, user: user1._id });
+
       // Participation for another user, should not be included
-      await Participation.create({ event: event1._id, user: user2._id });
+      await Participation.create({ event: eventAug1._id, user: user2._id });
 
-      await Payment.create({ user: user1._id, month, paymentStatus: 'Paid', totalAmount: 300 });
+      // Create payment records for some months
+      await Payment.create({ user: user1._id, month: '2025-07', paymentStatus: 'Paid', totalAmount: 200 });
+      await Payment.create({ user: user1._id, month: '2025-09', paymentStatus: 'Paid', totalAmount: 50 });
 
       const res = await request(app)
-        .get(`/api/payments/me/monthly?month=${month}`)
+        .get('/api/payments/me')
         .set('Authorization', `Bearer ${memberToken}`);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      const summary = res.body.data;
-      expect(summary.userId).toBe(user1._id.toString());
-      expect(summary.userName).toBe('User One');
-      expect(summary.month).toBe(month);
-      expect(summary.totalAmount).toBe(300);
-      expect(summary.paymentStatus).toBe('Paid');
-      expect(summary.events).toHaveLength(2);
-      expect(summary.events[0].name).toBe('Event 1');
-      expect(summary.events[1].name).toBe('Event 2');
+      const history = res.body.data;
+      expect(history).toHaveLength(3);
+
+      // Check sorting (latest month first)
+      expect(history[0].month).toBe('2025-09');
+      expect(history[1].month).toBe('2025-08');
+      expect(history[2].month).toBe('2025-07');
+
+      // Check data for each month
+      const sep_payment = history[0];
+      expect(sep_payment.totalAmount).toBe(50);
+      expect(sep_payment.paymentStatus).toBe('Paid');
+
+      const aug_payment = history[1];
+      expect(aug_payment.totalAmount).toBe(250); // 100 + 150
+      expect(aug_payment.paymentStatus).toBe('Unpaid'); // No payment record for August
+
+      const jul_payment = history[2];
+      expect(jul_payment.totalAmount).toBe(200);
+      expect(jul_payment.paymentStatus).toBe('Paid');
     });
 
     it('should return 401 if user is not authenticated', async () => {
-        const res = await request(app)
-          .get('/api/payments/me/monthly?month=2025-08');
-
+        const res = await request(app).get('/api/payments/me');
         expect(res.statusCode).toBe(401);
     });
 
-    it('should return 400 if month parameter is missing', async () => {
-        const res = await request(app)
-          .get('/api/payments/me/monthly')
-          .set('Authorization', `Bearer ${memberToken}`);
-
-        expect(res.statusCode).toBe(400);
-        expect(res.body.error).toBe('Month query parameter in YYYY-MM format is required');
-    });
-
-    it('should return 400 if month parameter is in invalid format', async () => {
-        const res = await request(app)
-          .get('/api/payments/me/monthly?month=202508')
-          .set('Authorization', `Bearer ${memberToken}`);
-
-        expect(res.statusCode).toBe(400);
-        expect(res.body.error).toBe('Month query parameter in YYYY-MM format is required');
-    });
-
-    it('should return a summary with 0 total when there are no participations', async () => {
-      const month = '2025-08';
+    it('should return an empty array if the user has no participation history', async () => {
       const res = await request(app)
-        .get(`/api/payments/me/monthly?month=${month}`)
+        .get('/api/payments/me')
         .set('Authorization', `Bearer ${memberToken}`);
 
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
-      const summary = res.body.data;
-      expect(summary.totalAmount).toBe(0);
-      expect(summary.paymentStatus).toBe('Unpaid');
-      expect(summary.events).toHaveLength(0);
+      expect(res.body.data).toEqual([]);
     });
   });
 });
